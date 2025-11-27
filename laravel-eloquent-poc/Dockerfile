@@ -31,6 +31,9 @@ RUN mkdir -p /home/${user}/.composer && \
 # Establecer el directorio de trabajo
 WORKDIR /var/www/html
 
+# Add /usr/local/sbin to PATH for the laradock user
+ENV PATH="/usr/local/sbin:$PATH"
+
 # Cambiar al usuario no-root
 USER ${user}
 
