@@ -1,0 +1,135 @@
+# Laravel Eloquent POC: Lazy vs. Eager Loading
+
+Este proyecto es una Prueba de Concepto (POC) de una aplicación Laravel diseñada para demostrar y comparar el comportamiento de la carga perezosa (Lazy Loading) y la carga ansiosa (Eager Loading) de relaciones en Eloquent, destacando el problema de "N+1 queries" y cómo mitigarlo.
+
+## Contenido de la POC
+
+*   **Modelos:** `User`, `Post`, `Comment`, `Tag` con sus relaciones bien definidas.
+*   **Migraciones y Seeders:** Para configurar la base de datos y poblarla con datos de ejemplo interconectados.
+*   **Rutas de Demostración:**
+    *   `/test-orm` (Carga Ansiosa): Muestra cómo cargar relaciones de manera eficiente.
+    *   `/lazy-orm` (Carga Perezosa): Demuestra el problema de "N+1 queries".
+*   **Logging de Consultas:** Configurado para mostrar todas las consultas SQL ejecutadas directamente en los logs de Docker, con marcadores claros para cada demostración.
+*   **Tests de Funcionalidad:** Para verificar que las rutas funcionan y devuelven la estructura de datos esperada.
+
+## Configuración del Entorno
+
+Asegúrate de tener Docker y Docker Compose instalados en tu sistema.
+
+1.  **Iniciar Contenedores Docker:**
+    Este comando construirá las imágenes (si es necesario) y levantará los servicios (`app` y `web`) en segundo plano.
+    ```bash
+    docker compose up -d --build
+    ```
+
+2.  **Instalar Dependencias de Composer y NPM:**
+    Estos comandos se ejecutan dentro del contenedor `app`.
+    ```bash
+    docker compose exec app composer install
+    docker compose exec app npm install
+    ```
+
+3.  **Configurar Laravel:**
+    Genera la clave de aplicación de Laravel.
+    ```bash
+    docker compose exec app php artisan key:generate
+    ```
+
+4.  **Configurar Base de Datos:**
+    Esto eliminará todas las tablas existentes y volverá a ejecutar todas las migraciones para asegurar un estado limpio de la base de datos.
+    ```bash
+    docker compose exec app php artisan migrate:fresh
+    ```
+
+5.  **Poblar Base de Datos (Seed):**
+    Llena la base de datos con datos de prueba (usuarios, posts, comentarios, tags).
+    ```bash
+    docker compose exec app php artisan db:seed
+    ```
+
+---
+
+## Demostración: Lazy Loading vs. Eager Loading
+
+El objetivo principal de esta POC es observar la diferencia en el número y la naturaleza de las consultas SQL que se disparan en la base de datos al usar carga perezosa y carga ansiosa.
+
+### Cómo funcionan los logs de consultas:
+
+Hemos configurado `app/Providers/AppServiceProvider.php` para interceptar todas las consultas SQL de Eloquent y enviarlas a `stderr`. Esto significa que puedes ver todas las consultas directamente en los logs de tu contenedor Docker.
+
+Para monitorear los logs en tiempo real, abre una terminal separada y ejecuta:
+
+```bash
+docker logs -f vb_orm_poc_app
+```
+
+Deja esta terminal abierta para observar las consultas a medida que realizas los siguientes pasos.
+
+### 1. Carga Ansiosa (Eager Loading) - Eficiente
+
+**Dónde se configura:** La carga ansiosa se implementa en la ruta `/test-orm` (definida en `routes/web.php`) utilizando el método `with()` de Eloquent:
+
+```php
+// routes/web.php
+Route::get('/test-orm', function () {
+    // Carga ansiosa de usuarios con sus posts, y los comentarios y tags de cada post.
+    $users = App\Models\User::with(['posts.comments', 'posts.tags'])->get();
+    return response()->json($users);
+});
+```
+
+**Pasos de Demostración:**
+
+1.  Asegúrate de que estás monitoreando los logs de Docker (ver arriba).
+2.  Abre tu navegador y visita: `http://localhost:8080/test-orm`
+3.  **Observa los logs en la terminal:**
+    Verás un marcador `--- Starting EAGER Loading for /test-orm ---`, seguido de un pequeño número de consultas SQL (típicamente 4-5):
+    *   Una consulta para obtener todos los usuarios.
+    *   Una consulta para obtener todos los posts relacionados con esos usuarios.
+    *   Una consulta para obtener todos los comentarios relacionados con esos posts.
+    *   Una consulta para obtener todos los tags relacionados con esos posts (a través de la tabla pivote).
+    *   Finalmente, un marcador `--- Finished EAGER Loading for /test-orm ---
+
+    Esto demuestra cómo la carga ansiosa resuelve el "N+1 problem" ejecutando un número fijo y mínimo de consultas.
+
+### 2. Carga Perezosa (Lazy Loading) - Problema N+1
+
+**Dónde se configura:** La carga perezosa se implementa en la ruta `/lazy-orm` (definida en `routes/web.php`) accediendo a las relaciones dentro de bucles, sin usar `with()`:
+
+```php
+// routes/web.php
+Route::get('/lazy-orm', function () {
+    $users = App\Models\User::all(); // Carga todos los usuarios (1 consulta)
+    // ... luego itera sobre cada usuario y cada post para acceder a sus relaciones.
+    // Cada acceso a $user->posts, $post->comments, $post->tags disparará una nueva consulta.
+    return response()->json($data); // La respuesta JSON es la misma que /test-orm
+});
+```
+
+**Pasos de Demostración:**
+
+1.  Asegúrate de que estás monitoreando los logs de Docker (ver arriba).
+2.  Abre tu navegador y visita: `http://localhost:8080/lazy-orm`
+3.  **Observa los logs en la terminal:**
+    Verás un marcador `--- Starting LAZY Loading for /lazy-orm ---`, seguido de un **gran número** de mensajes que detallan cada paso y consulta:
+    *   Un mensaje para "Fetching all users..." y la consulta `SELECT * from "users"`.
+    *   Para cada usuario:
+        *   Un mensaje indicando el procesamiento del usuario.
+        *   Un mensaje "Fetching posts for User ID: X (LAZY LOAD)" y **una consulta SQL para los posts de *ese* usuario.**
+        *   Para cada post de ese usuario:
+            *   Un mensaje indicando el procesamiento del post.
+            *   Un mensaje "Fetching comments for Post ID: Y (LAZY LOAD)" y **una consulta SQL para los comentarios de *ese* post.**
+            *   Un mensaje "Fetching tags for Post ID: Y (LAZY LOAD)" y **una consulta SQL para los tags de *ese* post.**
+    *   Finalmente, un marcador `--- Finished LAZY Loading for /lazy-orm ---
+
+    La cantidad de consultas será significativamente mayor que en el caso de carga ansiosa, demostrando el problema de "N+1 queries" donde N puede ser el número de usuarios, posts o comentarios.
+
+---
+
+## Limpieza
+
+Para detener y eliminar los contenedores Docker, ejecuta:
+
+```bash
+docker compose down
+```
