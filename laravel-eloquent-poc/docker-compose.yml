@@ -16,6 +16,7 @@ services:
     networks:
       - app-network
     entrypoint: ["./entrypoint.sh"]
+    command: ["php-fpm"]
 
   # Servidor web Nginx
   web:

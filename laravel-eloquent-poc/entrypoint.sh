@@ -27,16 +27,16 @@ else
 fi
 echo "FINISHED: application key check"
 
-# Run database migrations
-echo "STARTING: database migrations"
-php artisan migrate --force
-echo "FINISHED: database migrations"
-
 # Set appropriate permissions for Laravel
 echo "STARTING: setting permissions for Laravel directories"
 chown -R laradock:www-data storage bootstrap/cache
 chown -R laradock:www-data database
 echo "FINISHED: setting permissions for Laravel directories"
+
+# Run database migrations
+echo "STARTING: database migrations"
+php artisan migrate --force
+echo "FINISHED: database migrations"
 
 # Seed the database (optional, only if you have seeders)
 # echo "Seeding database..."

@@ -16,36 +16,23 @@ Este proyecto es una Prueba de Concepto (POC) de una aplicación Laravel diseña
 
 Asegúrate de tener Docker y Docker Compose instalados en tu sistema.
 
+**¡Configuración Simplificada!**
+
+Hemos configurado un `entrypoint.sh` en el contenedor `app` que automatiza todos los pasos de configuración inicial, incluyendo:
+*   Creación del archivo `.env` a partir de `.env.example` (si no existe).
+*   Instalación de dependencias de Composer.
+*   Generación de la clave de aplicación de Laravel.
+*   Ejecución de las migraciones de la base de datos.
+*   Establecimiento de permisos correctos para los directorios de Laravel.
+
+Por lo tanto, solo necesitas ejecutar un comando para levantar el entorno completo:
+
 1.  **Iniciar Contenedores Docker:**
     Este comando construirá las imágenes (si es necesario) y levantará los servicios (`app` y `web`) en segundo plano.
     ```bash
     docker compose up -d --build
     ```
-
-2.  **Instalar Dependencias de Composer y NPM:**
-    Estos comandos se ejecutan dentro del contenedor `app`.
-    ```bash
-    docker compose exec app composer install
-    docker compose exec app npm install
-    ```
-
-3.  **Configurar Laravel:**
-    Genera la clave de aplicación de Laravel.
-    ```bash
-    docker compose exec app php artisan key:generate
-    ```
-
-4.  **Configurar Base de Datos:**
-    Esto eliminará todas las tablas existentes y volverá a ejecutar todas las migraciones para asegurar un estado limpio de la base de datos.
-    ```bash
-    docker compose exec app php artisan migrate:fresh
-    ```
-
-5.  **Poblar Base de Datos (Seed):**
-    Llena la base de datos con datos de prueba (usuarios, posts, comentarios, tags).
-    ```bash
-    docker compose exec app php artisan db:seed
-    ```
+    Una vez que los contenedores estén levantados, el servicio `app` ejecutará automáticamente el `entrypoint.sh` para configurar la aplicación.
 
 ---
 
